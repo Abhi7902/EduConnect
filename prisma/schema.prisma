@@ -7,6 +7,97 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id          String       @id @default(cuid())
+  name        String
+  email       String       @unique
+  password    String
+  image       String?
+  role        UserRole
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  classrooms  Classroom[]
+  enrollments Enrollment[]
+  submissions Submission[]
+}
+
+model Classroom {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  code        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  teacherId   String
+  assignments Assignment[]
+  teacher     User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+  resources   Resource[]
+}
+
+model Enrollment {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now())
+  studentId   String
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  student     User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classroomId])
+}
+
+model Assignment {
+  id          String         @id @default(cuid())
+  title       String
+  description String
+  dueDate     DateTime
+  type        AssignmentType
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  classroomId String
+  classroom   Classroom      @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  submissions Submission[]
+}
+
+model Submission {
+  id           String     @id @default(cuid())
+  fileUrl      String?
+  answers      Json?
+  grade        Float?
+  feedback     String?
+  submittedAt  DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  assignmentId String
+  studentId    String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student      User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  questionText  String
+  type          QuestionType
+  options       Json?
+  correctAnswer String
+  points        Int          @default(1)
+  assignmentId  String
+  assignment    Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+}
+
+model Resource {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  fileUrl     String
+  type        ResourceType
+  createdAt   DateTime     @default(now())
+  classroomId String
+  classroom   Classroom    @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+}
+
 enum UserRole {
   STUDENT
   TEACHER
@@ -29,111 +120,4 @@ enum ResourceType {
   VIDEO
   LINK
   OTHER
-}
-
-model User {
-  id            String       @id @default(cuid())
-  name          String
-  email         String       @unique
-  password      String
-  image         String?
-  role          UserRole
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  // Teacher relationships
-  classrooms    Classroom[]
-  
-  // Student relationships
-  enrollments   Enrollment[]
-  submissions   Submission[]
-}
-
-model Classroom {
-  id            String       @id @default(cuid())
-  name          String
-  description   String?
-  code          String       @unique
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  
-  // Relationships
-  teacherId     String
-  teacher       User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  enrollments   Enrollment[]
-  assignments   Assignment[]
-  resources     Resource[]
-}
-
-model Enrollment {
-  id            String       @id @default(cuid())
-  createdAt     DateTime     @default(now())
-  
-  // Relationships
-  studentId     String
-  student       User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classroomId   String
-  classroom     Classroom    @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-
-  @@unique([studentId, classroomId])
-}
-
-model Assignment {
-  id            String         @id @default(cuid())
-  title         String
-  description   String
-  dueDate       DateTime
-  type          AssignmentType
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  
-  // Relationships
-  classroomId   String
-  classroom     Classroom      @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-  submissions   Submission[]
-  questions     Question[]
-}
-
-model Submission {
-  id            String       @id @default(cuid())
-  fileUrl       String?
-  answers       Json?        // For test submissions
-  grade         Float?
-  feedback      String?
-  submittedAt   DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  
-  // Relationships
-  assignmentId  String
-  assignment    Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  studentId     String
-  student       User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@unique([assignmentId, studentId])
-}
-
-model Question {
-  id            String       @id @default(cuid())
-  questionText  String
-  type          QuestionType
-  options       Json?        // For multiple choice questions
-  correctAnswer String
-  points        Int          @default(1)
-  
-  // Relationships
-  assignmentId  String
-  assignment    Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-}
-
-model Resource {
-  id            String       @id @default(cuid())
-  title         String
-  description   String?
-  fileUrl       String
-  type          ResourceType
-  createdAt     DateTime     @default(now())
-  
-  // Relationships
-  classroomId   String
-  classroom     Classroom    @relation(fields: [classroomId], references: [id], onDelete: Cascade)
 }
