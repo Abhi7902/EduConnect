@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import NextAuth from "next-auth";
 import { authOptions } from "@/lib/auth";
 

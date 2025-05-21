@@ -6,7 +6,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { SessionUser } from "./types";
 
 export const authOptions: NextAuthOptions = {
-  
+  adapter: PrismaAdapter(db),
   secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
