@@ -54,7 +54,10 @@ export async function GET(req: Request) {
         dueDate: "asc",
       },
       take: 5,
-      include: {
+      select: {
+        id: true,
+        title: true,
+        dueDate: true,
         classroom: {
           select: {
             name: true,
@@ -72,7 +75,10 @@ export async function GET(req: Request) {
         submittedAt: "desc",
       },
       take: 5,
-      include: {
+      select: {
+        id: true,
+        grade: true,
+        submittedAt: true,
         assignment: {
           select: {
             title: true,
@@ -87,17 +93,22 @@ export async function GET(req: Request) {
         upcomingAssignments: upcomingAssignments.map(a => ({
           id: a.id,
           title: a.title,
-          dueDate: a.dueDate,
+          dueDate: a.dueDate.toISOString(),
           classroomName: a.classroom.name,
         })),
         recentSubmissions: recentSubmissions.map(s => ({
           id: s.id,
           assignmentTitle: s.assignment.title,
-          submittedAt: s.submittedAt,
+          submittedAt: s.submittedAt.toISOString(),
           grade: s.grade,
         })),
       }),
-      { status: 200 }
+      { 
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }
     );
   } catch (error) {
     console.error("Error fetching student dashboard data:", error);

@@ -122,11 +122,16 @@ export async function GET(req: Request) {
           id: s.id,
           assignmentTitle: s.assignment.title,
           studentName: s.student.name,
-          submittedAt: s.submittedAt,
+          submittedAt: s.submittedAt.toISOString(),
           classroomName: s.assignment.classroom.name,
         })),
       }),
-      { status: 200 }
+      { 
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }
     );
   } catch (error) {
     console.error("Error fetching teacher dashboard data:", error);
