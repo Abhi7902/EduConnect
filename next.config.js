@@ -4,9 +4,9 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: { unoptimized: true },
-  experimental: {
-    serverActions: true,
-  },
+  // experimental: {
+  //   serverActions: true,
+  // },
   webpack: (config) => {
     config.externals = [...config.externals, "prisma", "postres"];
     return config;
