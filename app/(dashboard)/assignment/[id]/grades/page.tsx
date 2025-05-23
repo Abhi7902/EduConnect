@@ -88,7 +88,7 @@ export default function AssignmentGrades({ params }: { params: { id: string } })
   const handleGradeSubmission = async (submissionId: string) => {
     setSaving(true);
     try {
-      const response = await fetch(`/api/assignments/${params.id}/submissions/${submissionId}/grade`, {
+      const response = await fetch(`/api/submissions/${submissionId}/grade`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

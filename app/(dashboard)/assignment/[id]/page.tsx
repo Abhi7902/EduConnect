@@ -48,7 +48,7 @@ export default function AssignmentPage() {
 
     const fetchAssignment = async () => {
       try {
-        console.log(params.id);
+
         const response = await fetch(`/api/assignments/${params.id}`);
         if (!response.ok) throw new Error("Failed to fetch assignment");
 
