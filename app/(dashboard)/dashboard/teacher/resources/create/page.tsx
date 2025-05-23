@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -47,6 +47,21 @@ export default function CreateResource() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+
+  // Fetch classrooms for the select dropdown
+  useEffect(() => {
+    const fetchClassrooms = async () => {
+      try {
+        const res = await fetch("/api/classrooms");
+        if (!res.ok) throw new Error("Failed to fetch classrooms");
+        const data = await res.json();
+        setClassrooms(data);
+      } catch (error) {
+        toast.error("Failed to load classrooms");
+      }
+    };
+    fetchClassrooms();
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),

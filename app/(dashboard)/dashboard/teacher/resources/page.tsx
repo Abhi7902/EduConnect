@@ -74,7 +74,7 @@ export default function TeacherResources() {
           </p>
         </div>
         <Button asChild>
-          <a href="/resources/create">
+          <a href="/dashboard/teacher/resources/create">
             <Plus className="mr-2 h-4 w-4" /> Upload Resource
           </a>
         </Button>
@@ -88,7 +88,7 @@ export default function TeacherResources() {
             Upload learning materials for your students by clicking the 'Upload Resource' button.
           </p>
           <Button asChild className="mt-4">
-            <a href="/resources/create">
+            <a href="/dashboard/teacher/resources/create">
               <Plus className="mr-2 h-4 w-4" /> Upload First Resource
             </a>
           </Button>

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { UploadDropzone } from "@uploadthing/react";
 import { toast } from "sonner";
 import { FileIcon, X } from "lucide-react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
 interface UploadThingProps {
@@ -12,6 +11,8 @@ interface UploadThingProps {
   value: string;
   endpoint: "resourceUploader" | "assignmentUploader";
 }
+
+type UploadResponseItem = { url: string };
 
 export function UploadThing({
   onChange,
@@ -27,7 +28,7 @@ export function UploadThing({
   if (!mounted) return null;
 
   const fileType = value?.split('.').pop();
-  
+
   if (value) {
     return (
       <div className="flex items-center p-2 mt-2 rounded-md bg-muted/50">
@@ -36,9 +37,9 @@ export function UploadThing({
             <FileIcon className="h-5 w-5" />
           </div>
           <div className="flex-1 flex flex-col truncate">
-            <a 
-              href={value} 
-              target="_blank" 
+            <a
+              href={value}
+              target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-blue-500 hover:underline truncate"
             >
@@ -63,16 +64,16 @@ export function UploadThing({
 
   return (
     <div className="mt-2">
-      <UploadDropzone
-        endpoint={endpoint}
-        onClientUploadComplete={(res) => {
-          onChange(res?.[0]?.url);
-          toast.success("File uploaded successfully");
-        }}
-        onUploadError={(error: Error) => {
-          toast.error(`Upload error: ${error?.message}`);
-        }}
-      />
+    <UploadDropzone<"resourceUploader" | "assignmentUploader">
+  endpoint={endpoint}
+  onClientUploadComplete={(res: UploadResponseItem[]) => {
+    onChange(res?.[0]?.url);
+    toast.success("File uploaded successfully");
+  }}
+  onUploadError={(error: Error) => {
+    toast.error(`Upload error: ${error?.message}`);
+  }}
+/>
     </div>
   );
 }
