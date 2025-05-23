@@ -5,6 +5,7 @@ import { UploadDropzone } from "@uploadthing/react";
 import { toast } from "sonner";
 import { FileIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { OurFileRouter } from "@/app/api/uploadthing/core";  
 
 interface UploadThingProps {
   onChange: (url?: string) => void;
@@ -62,18 +63,18 @@ export function UploadThing({
     );
   }
 
-  return (
-    <div className="mt-2">
-    <UploadDropzone<"resourceUploader" | "assignmentUploader">
-  endpoint={endpoint}
-  onClientUploadComplete={(res: UploadResponseItem[]) => {
-    onChange(res?.[0]?.url);
-    toast.success("File uploaded successfully");
-  }}
-  onUploadError={(error: Error) => {
-    toast.error(`Upload error: ${error?.message}`);
-  }}
-/>
-    </div>
-  );
+return (
+  <div className="mt-2">
+    <UploadDropzone<OurFileRouter, any>
+      endpoint={endpoint}
+      onClientUploadComplete={(res: UploadResponseItem[]) => {
+        onChange(res?.[0]?.url);
+        toast.success("File uploaded successfully");
+      }}
+      onUploadError={(error: Error) => {
+        toast.error(`Upload error: ${error?.message}`);
+      }}
+    />
+  </div>
+);
 }
