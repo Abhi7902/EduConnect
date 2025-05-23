@@ -1,214 +1,232 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { FileText, Clock, CheckCircle } from "lucide-react";
-import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import {
+  Loader2,
+  Calendar,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  FileText,
+  Plus,
+} from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
+// Types
+type Classroom = {
+  id: string;
+  name: string;
+};
 
-interface Assignment {
+type Assignment = {
   id: string;
   title: string;
   description: string;
   dueDate: string;
-  type: "TEST" | "DOCUMENT";
-  classroom: {
-    name: string;
-  };
-  submissions: {
-    id: string;
-    studentId: string;
-    submittedAt: string;
-    grade: number | null;
-  }[];
-}
+  submissionCount: number;
+  classroom: Classroom;
+};
 
-export default function TeacherAssignments() {
+export default function TeacherAssignmentsPage() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
 
   useEffect(() => {
-    fetchAssignments();
-  }, []);
+    if (status === "loading") return;
 
-  const fetchAssignments = async () => {
-    try {
-      const response = await fetch("/api/teacher/assignments");
-      if (!response.ok) throw new Error("Failed to fetch assignments");
-      const data = await response.json();
-      setAssignments(data);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load assignments");
-    } finally {
-      setLoading(false);
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
     }
-  };
 
-  if (loading) {
+    const fetchData = async () => {
+      try {
+        const assignmentsResponse = await fetch("/api/teacher/assignments");
+        if (!assignmentsResponse.ok) {
+          throw new Error("Failed to fetch assignments");
+        }
+        const assignmentsData: Assignment[] = await assignmentsResponse.json();
+        setAssignments(assignmentsData);
+
+        const classroomsResponse = await fetch("/api/teacher/classrooms");
+        if (!classroomsResponse.ok) {
+          throw new Error("Failed to fetch classrooms");
+        }
+        const classroomsData: Classroom[] = await classroomsResponse.json();
+        setClassrooms(classroomsData);
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setError("Failed to load data");
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [router, status]);
+
+  if (status === "loading" || loading) {
     return (
-      <div className="space-y-8">
-        <div>
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-40 mt-2" />
-        </div>
-        <Skeleton className="h-10 w-[400px]" />
-        <div className="space-y-4">
-          <Skeleton className="h-[100px]" />
-          <Skeleton className="h-[100px]" />
-          <Skeleton className="h-[100px]" />
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="ml-2">Loading assignments...</span>
       </div>
     );
   }
 
-  const activeAssignments = assignments.filter(
-    (a) => new Date(a.dueDate) > new Date()
-  );
-  const pastAssignments = assignments.filter(
-    (a) => new Date(a.dueDate) <= new Date()
-  );
-  const pendingGrading = assignments.filter((a) =>
-    a.submissions.some((s) => s.grade === null)
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h1 className="text-xl font-bold text-red-500">{error}</h1>
+      </div>
+    );
+  }
+
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const isOverdue = (dueDate: string): boolean => {
+    return new Date(dueDate) < new Date();
+  };
+
+  const assignmentsByClassroom: Record<string, Assignment[]> = assignments.reduce(
+    (acc: Record<string, Assignment[]>, assignment: Assignment) => {
+      const classroomName = assignment.classroom.name;
+      if (!acc[classroomName]) {
+        acc[classroomName] = [];
+      }
+      acc[classroomName].push(assignment);
+      return acc;
+    },
+    {}
   );
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Assignments</h1>
-          <p className="text-muted-foreground">
-            Manage your classroom assignments
-          </p>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Assignments</h1>
+        <div className="flex space-x-2">
+          {classrooms.length > 0 && (
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  router.push(`/classroom/${e.target.value}/assignments/create`);
+                }
+              }}
+              className="bg-blue-500 text-white rounded-md px-4 py-2 cursor-pointer"
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Create Assignment
+              </option>
+              {classrooms.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
-        <Button asChild>
-          <Link href="/assignments/create">Create Assignment</Link>
-        </Button>
       </div>
 
-      <Tabs defaultValue="active">
-        <TabsList>
-          <TabsTrigger value="active">
-            Active ({activeAssignments.length})
-          </TabsTrigger>
-          <TabsTrigger value="past">
-            Past ({pastAssignments.length})
-          </TabsTrigger>
-          <TabsTrigger value="grading">
-            Needs Grading ({pendingGrading.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="active" className="space-y-4 mt-6">
-          {activeAssignments.length === 0 ? (
-            <div className="text-center py-12 bg-muted/40 rounded-lg">
-              <FileText className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <h3 className="text-lg font-medium">No active assignments</h3>
-              <p className="text-muted-foreground mt-1">
-                Create your first assignment to get started
-              </p>
-              <Button asChild className="mt-4">
-                <Link href="/assignments/create">Create Assignment</Link>
-              </Button>
-            </div>
+      {assignments.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-md p-6 text-center">
+          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">No Assignments Created</h2>
+          <p className="text-gray-600 mb-4">
+            You haven't created any assignments yet. Create your first assignment to get started.
+          </p>
+          {classrooms.length > 0 ? (
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  router.push(`/classroom/${e.target.value}/assignments/create`);
+                }
+              }}
+              className="bg-blue-500 text-white rounded-md px-4 py-2 cursor-pointer"
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Select a classroom
+              </option>
+              {classrooms.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </select>
           ) : (
-            activeAssignments.map((assignment) => (
-              <AssignmentCard key={assignment.id} assignment={assignment} />
-            ))
+            <button
+              onClick={() => router.push("/classroom/create")}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center justify-center mx-auto"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create a Classroom First
+            </button>
           )}
-        </TabsContent>
-
-        <TabsContent value="past" className="space-y-4 mt-6">
-          {pastAssignments.length === 0 ? (
-            <div className="text-center py-12 bg-muted/40 rounded-lg">
-              <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <h3 className="text-lg font-medium">No past assignments</h3>
-              <p className="text-muted-foreground mt-1">
-                Your previous assignments will appear here
-              </p>
-            </div>
-          ) : (
-            pastAssignments.map((assignment) => (
-              <AssignmentCard key={assignment.id} assignment={assignment} />
-            ))
-          )}
-        </TabsContent>
-
-        <TabsContent value="grading" className="space-y-4 mt-6">
-          {pendingGrading.length === 0 ? (
-            <div className="text-center py-12 bg-muted/40 rounded-lg">
-              <CheckCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <h3 className="text-lg font-medium">No assignments need grading</h3>
-              <p className="text-muted-foreground mt-1">
-                You're all caught up!
-              </p>
-            </div>
-          ) : (
-            pendingGrading.map((assignment) => (
-              <AssignmentCard key={assignment.id} assignment={assignment} />
-            ))
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
-
-function AssignmentCard({ assignment }: { assignment: Assignment }) {
-  const dueDate = new Date(assignment.dueDate);
-  const isOverdue = dueDate <= new Date();
-  const submissionCount = assignment.submissions.length;
-  const gradedCount = assignment.submissions.filter((s) => s.grade !== null).length;
-
-  return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-lg font-semibold">{assignment.title}</h3>
-              <Badge variant={assignment.type === "TEST" ? "default" : "outline"}>
-                {assignment.type === "TEST" ? "Online Test" : "Document Submission"}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              {assignment.classroom.name} · Due {dueDate.toLocaleDateString()}
-            </p>
-            <p className="text-sm line-clamp-2">{assignment.description}</p>
-          </div>
-
-          <div className="flex flex-col sm:items-end gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {submissionCount} submission{submissionCount !== 1 ? "s" : ""}
-              </span>
-              {submissionCount > 0 && (
-                <>
-                  <span className="font-medium">{Math.round((gradedCount / submissionCount) * 100)}% graded</span>
-                  <Progress
-                    value={(gradedCount / submissionCount) * 100}
-                    className="w-20 h-2"
-                  />
-                </>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button asChild variant="outline">
-                <Link href={`/assignment/${assignment.id}`}>View Details</Link>
-              </Button>
-              <Button asChild>
-                <Link href={`/assignment/${assignment.id}/grades`}>Grade Submissions</Link>
-              </Button>
-            </div>
-          </div>
         </div>
-      </CardContent>
-    </Card>
+      ) : (
+        Object.entries(assignmentsByClassroom).map(
+          ([classroomName, classroomAssignments]) => (
+            <div key={classroomName} className="mb-8">
+              <h2 className="text-xl font-semibold mb-4">{classroomName}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {classroomAssignments.map((assignment: Assignment) => {
+                  const overdue = isOverdue(assignment.dueDate);
+                  return (
+                    <div
+                      key={assignment.id}
+                      className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+                      onClick={() => router.push(`/assignment/${assignment.id}`)}
+                    >
+                      <div className="p-5">
+                        <div className="flex justify-between items-start mb-3">
+                          <h3 className="font-semibold text-lg">{assignment.title}</h3>
+                          {overdue ? (
+                            <div className="flex items-center text-orange-500">
+                              <Clock className="w-5 h-5 mr-1" />
+                              <span className="text-sm">Past Due</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center text-green-500">
+                              <CheckCircle className="w-5 h-5 mr-1" />
+                              <span className="text-sm">Active</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                          {assignment.description}
+                        </p>
+                        <div className="flex items-center text-gray-500 text-sm mb-2">
+                          <Calendar className="w-4 h-4 mr-1" />
+                          <span>Due: {formatDate(assignment.dueDate)}</span>
+                        </div>
+                        <div className="flex items-center text-gray-500 text-sm">
+                          <FileText className="w-4 h-4 mr-1" />
+                          <span>Submissions: {assignment.submissionCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
+        )
+      )}
+    </div>
   );
 }
