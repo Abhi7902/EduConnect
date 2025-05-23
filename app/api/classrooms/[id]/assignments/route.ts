@@ -1,180 +1,126 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import prisma from "@/lib/prisma";
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: classroomId } = await params; // Unwrapping params
-
     const session = await getServerSession(authOptions);
 
-    if (!session?.user) {
-      return new NextResponse(
-        JSON.stringify({ message: "Unauthorized" }),
-        { status: 401 }
-      );
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session.user.id;
-    const userRole = session.user.role;
+    const classroomId = params.id;
 
-    // Check if the user has access to this classroom
-    let hasAccess;
+    // Verify classroom exists and user has access
+    const classroom = await prisma.classroom.findUnique({
+      where: {
+        id: classroomId,
+      },
+      include: {
+        students: true,
+        teacher: true,
+      },
+    });
 
-    if (userRole === "TEACHER") {
-      // Teachers should be the owner of the classroom
-      hasAccess = await db.classroom.findFirst({
-        where: {
-          id: classroomId,
-          teacherId: userId,
-        },
-      });
-    } else {
-      // Students should be enrolled in the classroom
-      hasAccess = await db.classroom.findFirst({
-        where: {
-          id: classroomId,
-          enrollments: {
-            some: {
-              studentId: userId,
-            },
-          },
-        },
-      });
-    }
-
-    if (!hasAccess) {
-      return new NextResponse(
-        JSON.stringify({ message: "Classroom not found or access denied" }),
+    if (!classroom) {
+      return NextResponse.json(
+        { error: "Classroom not found" },
         { status: 404 }
       );
     }
 
-    // Fetch assignments for the classroom
-    const assignments = await db.assignment.findMany({
+    // Check if user is teacher or student in this classroom
+    const isTeacher = classroom.teacherId === session.user.id;
+    const isStudent = classroom.students.some(
+      (student) => student.id === session.user.id
+    );
+
+    if (!isTeacher && !isStudent) {
+      return NextResponse.json(
+        { error: "You don't have access to this classroom" },
+        { status: 403 }
+      );
+    }
+
+    // Get assignments for the classroom
+    const assignments = await prisma.assignment.findMany({
       where: {
         classroomId,
+      },
+      include: {
+        submissions: {
+          where: isStudent ? { studentId: session.user.id } : undefined,
+        },
       },
       orderBy: {
         dueDate: "asc",
       },
-      include: {
-        submissions: userRole === "STUDENT"
-          ? {
-              where: {
-                studentId: userId,
-              },
-              select: {
-                id: true,
-                studentId: true,
-                submittedAt: true,
-                grade: true,
-              },
-            }
-          : {
-              select: {
-                id: true,
-                studentId: true,
-                submittedAt: true,
-                grade: true,
-              },
-            },
-      },
     });
 
-    return new NextResponse(
-      JSON.stringify(assignments),
-      { status: 200 }
-    );
+    return NextResponse.json(assignments);
   } catch (error) {
     console.error("Error fetching assignments:", error);
-    return new NextResponse(
-      JSON.stringify({ message: "Internal server error" }),
+    return NextResponse.json(
+      { error: "Failed to fetch assignments" },
       { status: 500 }
     );
   }
 }
 
 export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: classroomId } = await params; // Unwrapping params
-
     const session = await getServerSession(authOptions);
 
-    if (!session?.user) {
-      return new NextResponse(
-        JSON.stringify({ message: "Unauthorized" }),
-        { status: 401 }
-      );
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.user.role !== "TEACHER") {
-      return new NextResponse(
-        JSON.stringify({ message: "Only teachers can create assignments" }),
-        { status: 403 }
-      );
-    }
+    const classroomId = params.id;
+    const data = await request.json();
 
-    const userId = session.user.id;
-    const body = await req.json();
-
-    // Validate that the teacher owns this classroom
-    const classroom = await db.classroom.findFirst({
+    // Verify classroom exists and user is the teacher
+    const classroom = await prisma.classroom.findUnique({
       where: {
         id: classroomId,
-        teacherId: userId,
+        teacherId: session.user.id,
       },
     });
 
     if (!classroom) {
-      return new NextResponse(
-        JSON.stringify({ message: "Classroom not found or you do not have permission" }),
-        { status: 404 }
+      return NextResponse.json(
+        { error: "Classroom not found or you're not the teacher" },
+        { status: 403 }
       );
     }
 
-    // Create the assignment
-    const assignment = await db.assignment.create({
+    // Create new assignment
+    const assignment = await prisma.assignment.create({
       data: {
-        title: body.title,
-        description: body.description,
-        dueDate: new Date(body.dueDate),
-        type: body.type,
-        classroomId,
-        // Create questions if this is a test assignment
-        ...(body.type === "TEST" && body.questions
-          ? {
-              questions: {
-                createMany: {
-                  data: body.questions.map((q: any) => ({
-                    questionText: q.questionText,
-                    type: q.type,
-                    options: q.options || [],
-                    correctAnswer: q.correctAnswer,
-                    points: q.points || 1,
-                  })),
-                },
-              },
-            }
-          : {}),
+        title: data.title,
+        description: data.description,
+        dueDate: new Date(data.dueDate),
+        totalPoints: data.totalPoints,
+        classroom: {
+          connect: {
+            id: classroomId,
+          },
+        },
       },
     });
 
-    return new NextResponse(
-      JSON.stringify(assignment),
-      { status: 201 }
-    );
+    return NextResponse.json(assignment);
   } catch (error) {
     console.error("Error creating assignment:", error);
-    return new NextResponse(
-      JSON.stringify({ message: "Internal server error" }),
+    return NextResponse.json(
+      { error: "Failed to create assignment" },
       { status: 500 }
     );
   }

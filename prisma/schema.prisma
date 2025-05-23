@@ -58,6 +58,7 @@ model Assignment {
   classroom   Classroom      @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   questions   Question[]
   submissions Submission[]
+  totalPoints Int
 }
 
 model Submission {

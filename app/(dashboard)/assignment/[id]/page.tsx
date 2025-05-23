@@ -1,337 +1,344 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, ChangeEvent, FormEvent } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { toast } from "sonner";
-import { FileText, Upload, Clock, CheckCircle } from "lucide-react";
+import {
+  Loader2,
+  FileText,
+  Upload,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { UploadThing } from "@/components/uploadthing";
-import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-
-interface Question {
-  id: string;
-  questionText: string;
-  type: "MULTIPLE_CHOICE" | "SHORT_ANSWER";
-  options?: string[];
-  points: number;
-  correctAnswer?: string;
-}
-
+// Define types for assignment and submission objects
 interface Submission {
-  id: string;
-  fileUrl?: string;
-  answers?: Record<string, string>;
-  grade?: number;
+  fileName: string;
   submittedAt: string;
+  grade: number | null;
+  feedback?: string;
 }
 
 interface Assignment {
-  id: string;
   title: string;
-  description: string;
   dueDate: string;
-  type: "TEST" | "DOCUMENT";
-  classroomId: string;
-  questions?: Question[];
+  totalPoints: number;
+  description: string;
   submissions?: Submission[];
 }
 
-export default function AssignmentDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function AssignmentPage() {
+  const params = useParams();
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [fileUrl, setFileUrl] = useState<string>("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-
-  const isTeacher = session?.user?.role === "TEACHER";
-  const isStudent = session?.user?.role === "STUDENT";
-  const hasSubmitted = assignment?.submissions?.length ?? 0 > 0;
-  const isOverdue = new Date(assignment?.dueDate ?? "") < new Date();
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (id) {
-      fetchAssignment();
+    if (status === "loading") return;
+
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
     }
-  }, [id]);
 
-const fetchAssignment = async () => {
-  try {
-    // First fetch the assignment by ID to get classroomId and basic data
-    const assignmentResponse = await fetch(`/api/assignments/${id}`);
-    if (!assignmentResponse.ok) throw new Error("Failed to fetch assignment metadata");
-    const assignmentData = await assignmentResponse.json();
+    const fetchAssignment = async () => {
+      try {
+        console.log(params.id);
+        const response = await fetch(`/api/assignments/${params.id}`);
+        if (!response.ok) throw new Error("Failed to fetch assignment");
 
-    const classroomId = assignmentData.classroomId;
-    if (!classroomId) throw new Error("Classroom ID not found in assignment data");
+        const data: Assignment = await response.json();
+        setAssignment(data);
 
-    // Now fetch the full assignment details using classroomId
-    const response = await fetch(`/api/classrooms/${classroomId}/assignments/${id}`);
-    if (!response.ok) throw new Error("Failed to fetch assignment details");
+        if (data.submissions && data.submissions.length > 0) {
+          setSubmission(data.submissions[0]);
+        }
 
-    const data = await response.json();
-    setAssignment(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching assignment:", error);
+        setError("Failed to load assignment details");
+        setLoading(false);
+      }
+    };
 
-    if (data.type === "TEST" && data.questions) {
-      const initialAnswers: Record<string, string> = {};
-      data.questions.forEach((q: Question) => {
-        initialAnswers[q.id] = "";
-      });
-      setAnswers(initialAnswers);
+    fetchAssignment();
+  }, [params.id, router, status]);
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    setFile(selectedFile || null);
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+
+    if (!file) {
+      setError("Please select a file to submit");
+      return;
     }
-  } catch (error) {
-    console.error(error);
-    toast.error("Failed to load assignment");
-  } finally {
-    setLoading(false);
-  }
-};
 
-
-  const handleSubmit = async () => {
-    if (!assignment) return;
     setSubmitting(true);
-    try {
-      const submission = {
-        fileUrl: assignment.type === "DOCUMENT" ? fileUrl : undefined,
-        answers: assignment.type === "TEST" ? answers : undefined,
-      };
+    setError("");
 
-      const response = await fetch(`/api/classrooms/${assignment.classroomId}/assignments/${assignment.id}/submit`, {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("assignmentId", params.id as string);
+
+      const response = await fetch("/api/submissions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(submission),
+        body: formData,
       });
 
       if (!response.ok) throw new Error("Failed to submit assignment");
 
-      toast.success("Assignment submitted successfully");
-      router.refresh();
-      fetchAssignment(); // refresh data
+      const data: Submission = await response.json();
+      setSubmission(data);
+      setFile(null);
+
+      const refreshed = await fetch(`/api/assignments/${params.id}`);
+      const updatedAssignment: Assignment = await refreshed.json();
+      setAssignment(updatedAssignment);
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to submit assignment");
+      console.error("Error submitting assignment:", error);
+      setError("Failed to submit assignment. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   if (loading) {
     return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-4 w-40 mt-2" />
-          </div>
-          <Skeleton className="h-10 w-32" />
-        </div>
-        <Skeleton className="h-[400px] w-full" />
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <span className="ml-2">Loading assignment...</span>
+      </div>
+    );
+  }
+
+  if (error && !assignment) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <XCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h1 className="text-xl font-bold text-red-500">{error}</h1>
+        <button
+          onClick={() => router.back()}
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Go Back
+        </button>
       </div>
     );
   }
 
   if (!assignment) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px]">
-        <h2 className="text-2xl font-bold mb-2">Assignment not found</h2>
-        <p className="text-muted-foreground mb-6">
-          The assignment you're looking for doesn't exist or you don't have access to it.
-        </p>
-        <Button onClick={() => router.push("/dashboard")}>Return to Dashboard</Button>
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <XCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h1 className="text-xl font-bold">Assignment not found</h1>
+        <button
+          onClick={() => router.back()}
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Go Back
+        </button>
       </div>
     );
   }
 
-  const dueDate = new Date(assignment.dueDate);
-  const submission = assignment.submissions?.[0];
+  const isOverdue = new Date(assignment.dueDate) < new Date();
+  const canSubmit =
+    session?.user?.role === "STUDENT" && (!isOverdue || submission);
 
   return (
-    <div className="max-w-4xl mx-auto py-10">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold">{assignment.title}</h1>
-            <Badge variant={assignment.type === "TEST" ? "default" : "outline"}>
-              {assignment.type === "TEST" ? "Online Test" : "Document Submission"}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground mt-2">
-            Due {dueDate.toLocaleDateString()} at {dueDate.toLocaleTimeString()}
-          </p>
-        </div>
-        {isTeacher && (
-          <Button onClick={() => router.push(`/assignment/${id}/grades`)}>
-            View Submissions
-          </Button>
-        )}
-      </div>
-
-      <div className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Instructions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-wrap">{assignment.description}</p>
-          </CardContent>
-        </Card>
-
-        {isStudent && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {hasSubmitted ? "Your Submission" : "Submit Assignment"}
-              </CardTitle>
-              <CardDescription>
-                {hasSubmitted
-                  ? `Submitted on ${new Date(submission!.submittedAt).toLocaleString()}`
-                  : isOverdue
-                  ? "This assignment is overdue"
-                  : "Complete and submit your work"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {hasSubmitted ? (
-                <div className="space-y-4">
-                  {submission?.grade !== null ? (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <span className="font-medium">Grade: {submission?.grade}%</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-5 w-5 text-amber-500" />
-                      <span className="text-muted-foreground">Awaiting grade</span>
-                    </div>
-                  )}
-
-                  {assignment.type === "DOCUMENT" && submission?.fileUrl && (
-                    <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
-                      <FileText className="h-6 w-6 text-blue-500" />
-                      <div className="flex-1">
-                        <p className="font-medium">Submitted Document</p>
-                        <a
-                          href={submission.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-500 hover:underline"
-                        >
-                          View submission
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {assignment.type === "TEST" && submission?.answers && (
-                    <div className="space-y-6">
-                      {assignment.questions?.map((question, index) => (
-                        <div key={question.id} className="space-y-2">
-                          <div className="flex justify-between">
-                            <p className="font-medium">Question {index + 1}</p>
-                            <Badge variant="outline">{question.points} points</Badge>
-                          </div>
-                          <p className="text-sm">{question.questionText}</p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm">
-                              Student's answer: {submission.answers?.[question.id] ?? "N/A"}
-                            </p>
-                            {question.correctAnswer &&
-                              submission.answers?.[question.id] === question.correctAnswer && (
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                              )}
-                          </div>
-                          {question.correctAnswer && (
-                            <p className="text-sm text-muted-foreground">
-                              Correct answer: {question.correctAnswer}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {assignment.type === "DOCUMENT" ? (
-                    <UploadThing
-                      endpoint="assignmentUploader"
-                      value={fileUrl}
-                      onChange={(url?: string) => setFileUrl(url ?? "")}
-                    />
-                  ) : (
-                    <div className="space-y-8">
-                      {assignment.questions?.map((question, index) => (
-                        <div key={question.id} className="space-y-4">
-                          <div className="flex justify-between">
-                            <p className="font-medium">
-                              Question {index + 1}: {question.questionText}
-                            </p>
-                            <Badge variant="outline">{question.points} points</Badge>
-                          </div>
-
-                          {question.type === "MULTIPLE_CHOICE" ? (
-                            <RadioGroup
-                              value={answers[question.id]}
-                              onValueChange={(value) =>
-                                setAnswers((prev) => ({
-                                  ...prev,
-                                  [question.id]: value,
-                                }))
-                              }
-                            >
-                              {question.options?.map((option, i) => (
-                                <div key={i} className="flex items-center space-x-2">
-                                  <RadioGroupItem value={String(i + 1)} id={`q${index}-o${i}`} />
-                                  <Label htmlFor={`q${index}-o${i}`}>{option}</Label>
-                                </div>
-                              ))}
-                            </RadioGroup>
-                          ) : (
-                            <Input
-                              placeholder="Enter your answer"
-                              value={answers[question.id]}
-                              onChange={(e) =>
-                                setAnswers((prev) => ({
-                                  ...prev,
-                                  [question.id]: e.target.value,
-                                }))
-                              }
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={
-                      submitting ||
-                      (assignment.type === "DOCUMENT" && !fileUrl) ||
-                      (assignment.type === "TEST" &&
-                        Object.values(answers).some((a) => !a))
-                    }
-                    className="w-full"
-                  >
-                    {submitting ? "Submitting..." : "Submit Assignment"}
-                  </Button>
-                </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">{assignment.title}</h1>
+            <p className="text-gray-600 mb-1">
+              <span className="font-semibold">Due:</span>{" "}
+              {formatDate(assignment.dueDate)}
+              {isOverdue && !submission && (
+                <span className="ml-2 text-red-500 font-semibold">Overdue</span>
               )}
-            </CardContent>
-          </Card>
+            </p>
+            <p className="text-gray-600">
+              <span className="font-semibold">Points:</span>{" "}
+              {assignment.totalPoints}
+            </p>
+          </div>
+          <div className="flex items-center">
+            {submission && (
+              <div className="flex items-center text-green-500">
+                <CheckCircle className="w-5 h-5 mr-1" />
+                <span>Submitted</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="prose max-w-none mb-8">
+          <h2 className="text-xl font-semibold mb-2">Instructions</h2>
+          <div className="whitespace-pre-wrap">{assignment.description}</div>
+        </div>
+
+        {session?.user?.role === "STUDENT" && (
+          <div className="border-t pt-6">
+            <h2 className="text-xl font-semibold mb-4">Your Submission</h2>
+            {submission ? (
+              <div className="bg-gray-50 p-4 rounded-md">
+                <div className="flex items-center mb-2">
+                  <FileText className="w-5 h-5 mr-2 text-blue-500" />
+                  <span className="font-medium">{submission.fileName}</span>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Submitted on {formatDate(submission.submittedAt)}
+                </p>
+                {submission.grade !== null ? (
+                  <div className="mt-2 p-2 bg-blue-50 rounded">
+                    <p className="font-semibold">
+                      Grade: {submission.grade} / {assignment.totalPoints}
+                    </p>
+                    {submission.feedback && (
+                      <div className="mt-2">
+                        <p className="font-semibold">Feedback:</p>
+                        <p className="whitespace-pre-wrap">
+                          {submission.feedback}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">Not graded yet</p>
+                )}
+
+                {!isOverdue && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-700 mb-2">
+                      You can resubmit your work before the due date.
+                    </p>
+                    <form onSubmit={handleSubmit}>
+                      <div className="flex items-center">
+                        <input
+                          type="file"
+                          onChange={handleFileChange}
+                          className="block w-full text-sm text-gray-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-blue-50 file:text-blue-700
+                            hover:file:bg-blue-100"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!file || submitting}
+                          className={`ml-4 px-4 py-2 rounded text-white flex items-center ${
+                            !file || submitting
+                              ? "bg-gray-400 cursor-not-allowed"
+                              : "bg-blue-500 hover:bg-blue-600"
+                          }`}
+                        >
+                          {submitting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Submitting...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Resubmit
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {error && (
+                        <p className="mt-2 text-red-500 text-sm">{error}</p>
+                      )}
+                    </form>
+                  </div>
+                )}
+              </div>
+            ) : canSubmit ? (
+              <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload your work
+                  </label>
+                  <input
+                    type="file"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100"
+                  />
+                </div>
+                {error && (
+                  <p className="mt-2 text-red-500 text-sm">{error}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={!file || submitting}
+                  className={`px-4 py-2 rounded text-white flex items-center ${
+                    !file || submitting
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-blue-500 hover:bg-blue-600"
+                  }`}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Submit Assignment
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <div className="bg-red-50 p-4 rounded-md text-red-700">
+                <p className="font-medium flex items-center">
+                  <XCircle className="w-5 h-5 mr-2" />
+                  The deadline for this assignment has passed.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {session?.user?.role === "TEACHER" && (
+          <div className="border-t pt-6">
+            <h2 className="text-xl font-semibold mb-4">Submissions</h2>
+            <button
+              onClick={() => router.push(`/assignment/${params.id}/grades`)}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              View and Grade Submissions
+            </button>
+          </div>
         )}
       </div>
     </div>

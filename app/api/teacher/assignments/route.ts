@@ -1,33 +1,36 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import prisma from "@/lib/prisma";
 
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user) {
-      return new NextResponse(
-        JSON.stringify({ message: "Unauthorized" }),
-        { status: 401 }
-      );
-    }
-
-    if (session.user.role !== "TEACHER") {
-      return new NextResponse(
-        JSON.stringify({ message: "Access denied" }),
-        { status: 403 }
-      );
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const userId = session.user.id;
 
-    // Get all assignments from teacher's classrooms
-    const assignments = await db.assignment.findMany({
+    // Get all classrooms where the user is a teacher
+    const classrooms = await prisma.classroom.findMany({
       where: {
-        classroom: {
-          teacherId: userId,
+        teacherId: userId,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    const classroomIds = classrooms.map((classroom) => classroom.id);
+
+    // Get all assignments from those classrooms
+    const assignments = await prisma.assignment.findMany({
+      where: {
+        classroomId: {
+          in: classroomIds,
         },
       },
       include: {
@@ -39,25 +42,31 @@ export async function GET(req: Request) {
         submissions: {
           select: {
             id: true,
-            studentId: true,
-            submittedAt: true,
-            grade: true,
           },
         },
       },
-      orderBy: {
-        dueDate: "desc",
-      },
+      orderBy: [
+        {
+          dueDate: "asc",
+        },
+      ],
     });
 
-    return new NextResponse(
-      JSON.stringify(assignments),
-      { status: 200 }
-    );
+    // Format the response to include submission counts
+    const formattedAssignments = assignments.map((assignment) => {
+      return {
+        ...assignment,
+        submissionCount: assignment.submissions.length,
+        // Remove the submissions array to clean up the response
+        submissions: undefined,
+      };
+    });
+
+    return NextResponse.json(formattedAssignments);
   } catch (error) {
     console.error("Error fetching teacher assignments:", error);
-    return new NextResponse(
-      JSON.stringify({ message: "Internal server error" }),
+    return NextResponse.json(
+      { error: "Failed to fetch assignments" },
       { status: 500 }
     );
   }
