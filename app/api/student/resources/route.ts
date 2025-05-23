@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-=======
 "use client";
 
->>>>>>> cb97eeba0418cf71bf3935ebdedc8689c1a94084
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -26,25 +23,15 @@ export async function GET(req: Request) {
       );
     }
 
-<<<<<<< HEAD
-    const userId = session.user.id;
-
-    // Get all resources from enrolled classrooms
-=======
     const studentId = session.user.id;
 
     // Get all resources from classrooms where the student is enrolled
->>>>>>> cb97eeba0418cf71bf3935ebdedc8689c1a94084
     const resources = await db.resource.findMany({
       where: {
         classroom: {
           enrollments: {
             some: {
-<<<<<<< HEAD
-              studentId: userId,
-=======
               studentId,
->>>>>>> cb97eeba0418cf71bf3935ebdedc8689c1a94084
             },
           },
         },
@@ -63,16 +50,12 @@ export async function GET(req: Request) {
 
     return new NextResponse(
       JSON.stringify(resources),
-<<<<<<< HEAD
-      { status: 200 }
-=======
       { 
         status: 200,
         headers: {
           'Content-Type': 'application/json',
         }
       }
->>>>>>> cb97eeba0418cf71bf3935ebdedc8689c1a94084
     );
   } catch (error) {
     console.error("Error fetching resources:", error);
