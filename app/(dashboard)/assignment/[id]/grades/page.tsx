@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { FileText, Download, CheckCircle, Clock } from "lucide-react";
-
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -242,31 +242,32 @@ export default function AssignmentGrades({ params }: { params: { id: string } })
                           </div>
                         )}
 
-                        {assignment.type === "TEST" && submission.answers && (
-                          <div className="space-y-4">
-                            {assignment.questions?.map((question, index) => (
-                              <div key={question.id} className="space-y-2">
-                                <div className="flex justify-between">
-                                  <p className="font-medium">Question {index + 1}</p>
-                                  <Badge variant="outline">{question.points} points</Badge>
-                                </div>
-                                <p className="text-sm">{question.questionText}</p>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-sm">
-                                    Student's answer: {submission.answers[question.id]}
-                                  </p>
-                                  {submission.answers[question.id] === question.correctAnswer && (
-                                    <CheckCircle className="h-4 w-4 text-green-500" />
-                                  )}
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  Correct answer: {question.correctAnswer}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                        {assignment.type === "TEST" && (
+  <div className="space-y-4">
+    {assignment.questions?.map((question, index) => {
+      const studentAnswer = submission.answers?.[question.id] ?? "Not answered";
+      const isCorrect = studentAnswer === question.correctAnswer;
+
+      return (
+        <div key={question.id} className="space-y-2">
+          <div className="flex justify-between">
+            <p className="font-medium">Question {index + 1}</p>
+            <Badge variant="outline">{question.points} points</Badge>
+          </div>
+          <p className="text-sm">{question.questionText}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm">Student's answer: {studentAnswer}</p>
+            {isCorrect && <CheckCircle className="h-4 w-4 text-green-500" />}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Correct answer: {question.correctAnswer}
+          </p>
+        </div>
+      );
+    })}
+  </div>
+)}
+</div>
 
                       <div className="w-full md:w-64 space-y-4">
                         <div>
