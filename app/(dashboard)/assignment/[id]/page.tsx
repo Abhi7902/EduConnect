@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -16,6 +16,23 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
+interface Question {
+  id: string;
+  questionText: string;
+  type: "MULTIPLE_CHOICE" | "SHORT_ANSWER";
+  options?: string[];
+  points: number;
+  correctAnswer?: string;
+}
+
+interface Submission {
+  id: string;
+  fileUrl?: string;
+  answers?: Record<string, string>;
+  grade?: number;
+  submittedAt: string;
+}
+
 interface Assignment {
   id: string;
   title: string;
@@ -23,29 +40,18 @@ interface Assignment {
   dueDate: string;
   type: "TEST" | "DOCUMENT";
   classroomId: string;
-  questions?: {
-    id: string;
-    questionText: string;
-    type: "MULTIPLE_CHOICE" | "SHORT_ANSWER";
-    options?: string[];
-    points: number;
-  }[];
-  submissions?: {
-    id: string;
-    fileUrl?: string;
-    answers?: Record<string, string>;
-    grade?: number;
-    submittedAt: string;
-  }[];
+  questions?: Question[];
+  submissions?: Submission[];
 }
 
-export default function AssignmentDetail({ params }: { params: { id: string } }) {
+export default function AssignmentDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const { data: session } = useSession();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [fileUrl, setFileUrl] = useState("");
+  const [fileUrl, setFileUrl] = useState<string>("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const isTeacher = session?.user?.role === "TEACHER";
@@ -54,37 +60,46 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
   const isOverdue = new Date(assignment?.dueDate ?? "") < new Date();
 
   useEffect(() => {
-    if (params.id) {
+    if (id) {
       fetchAssignment();
     }
-  }, [params.id]);
+  }, [id]);
 
-  const fetchAssignment = async () => {
-    try {
-      const response = await fetch(`/api/assignments/${params.id}`);
-      if (!response.ok) throw new Error("Failed to fetch assignment");
-      const data = await response.json();
-      setAssignment(data);
-      
-      // Initialize answers if it's a test
-      if (data.type === "TEST" && data.questions) {
-        const initialAnswers: Record<string, string> = {};
-        data.questions.forEach((q: any) => {
-          initialAnswers[q.id] = "";
-        });
-        setAnswers(initialAnswers);
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load assignment");
-    } finally {
-      setLoading(false);
+const fetchAssignment = async () => {
+  try {
+    // First fetch the assignment by ID to get classroomId and basic data
+    const assignmentResponse = await fetch(`/api/assignments/${id}`);
+    if (!assignmentResponse.ok) throw new Error("Failed to fetch assignment metadata");
+    const assignmentData = await assignmentResponse.json();
+
+    const classroomId = assignmentData.classroomId;
+    if (!classroomId) throw new Error("Classroom ID not found in assignment data");
+
+    // Now fetch the full assignment details using classroomId
+    const response = await fetch(`/api/classrooms/${classroomId}/assignments/${id}`);
+    if (!response.ok) throw new Error("Failed to fetch assignment details");
+
+    const data = await response.json();
+    setAssignment(data);
+
+    if (data.type === "TEST" && data.questions) {
+      const initialAnswers: Record<string, string> = {};
+      data.questions.forEach((q: Question) => {
+        initialAnswers[q.id] = "";
+      });
+      setAnswers(initialAnswers);
     }
-  };
+  } catch (error) {
+    console.error(error);
+    toast.error("Failed to load assignment");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleSubmit = async () => {
     if (!assignment) return;
-
     setSubmitting(true);
     try {
       const submission = {
@@ -92,7 +107,7 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
         answers: assignment.type === "TEST" ? answers : undefined,
       };
 
-      const response = await fetch(`/api/assignments/${params.id}/submit`, {
+      const response = await fetch(`/api/classrooms/${assignment.classroomId}/assignments/${assignment.id}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -104,7 +119,7 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
 
       toast.success("Assignment submitted successfully");
       router.refresh();
-      fetchAssignment(); // Refresh the assignment data
+      fetchAssignment(); // refresh data
     } catch (error) {
       console.error(error);
       toast.error("Failed to submit assignment");
@@ -158,7 +173,7 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
           </p>
         </div>
         {isTeacher && (
-          <Button onClick={() => router.push(`/assignment/${params.id}/grades`)}>
+          <Button onClick={() => router.push(`/assignment/${id}/grades`)}>
             View Submissions
           </Button>
         )}
@@ -224,12 +239,25 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
                     <div className="space-y-6">
                       {assignment.questions?.map((question, index) => (
                         <div key={question.id} className="space-y-2">
-                          <p className="font-medium">
-                            Question {index + 1}: {question.questionText}
-                          </p>
-                          <p className="text-muted-foreground">
-                            Your answer: {submission.answers[question.id]}
-                          </p>
+                          <div className="flex justify-between">
+                            <p className="font-medium">Question {index + 1}</p>
+                            <Badge variant="outline">{question.points} points</Badge>
+                          </div>
+                          <p className="text-sm">{question.questionText}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm">
+                              Student's answer: {submission.answers?.[question.id] ?? "N/A"}
+                            </p>
+                            {question.correctAnswer &&
+                              submission.answers?.[question.id] === question.correctAnswer && (
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                              )}
+                          </div>
+                          {question.correctAnswer && (
+                            <p className="text-sm text-muted-foreground">
+                              Correct answer: {question.correctAnswer}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -238,13 +266,11 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
               ) : (
                 <div className="space-y-6">
                   {assignment.type === "DOCUMENT" ? (
-                    <div>
-                      <UploadThing
-                        endpoint="assignmentUploader"
-                        value={fileUrl}
-                        onChange={setFileUrl}
-                      />
-                    </div>
+                    <UploadThing
+                      endpoint="assignmentUploader"
+                      value={fileUrl}
+                      onChange={(url?: string) => setFileUrl(url ?? "")}
+                    />
                   ) : (
                     <div className="space-y-8">
                       {assignment.questions?.map((question, index) => (

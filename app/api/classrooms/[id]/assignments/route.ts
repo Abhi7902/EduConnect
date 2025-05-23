@@ -5,9 +5,11 @@ import { db } from "@/lib/db";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: classroomId } = await params; // Unwrapping params
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user) {
@@ -19,7 +21,6 @@ export async function GET(
 
     const userId = session.user.id;
     const userRole = session.user.role;
-    const classroomId = params.id;
 
     // Check if the user has access to this classroom
     let hasAccess;
@@ -62,7 +63,7 @@ export async function GET(
         dueDate: "asc",
       },
       include: {
-        submissions: userRole === "STUDENT" 
+        submissions: userRole === "STUDENT"
           ? {
               where: {
                 studentId: userId,
@@ -100,9 +101,11 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: classroomId } = await params; // Unwrapping params
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user) {
@@ -120,7 +123,6 @@ export async function POST(
     }
 
     const userId = session.user.id;
-    const classroomId = params.id;
     const body = await req.json();
 
     // Validate that the teacher owns this classroom
