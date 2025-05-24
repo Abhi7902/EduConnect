@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,7 +44,8 @@ const formSchema = z.object({
   })).optional(),
 });
 
-export default function CreateAssignment({ params }: { params: { id: string } }) {
+export default function CreateAssignment({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [isTest, setIsTest] = useState(false);
@@ -87,7 +88,7 @@ export default function CreateAssignment({ params }: { params: { id: string } })
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setLoading(true);
     try {
-      const response = await fetch(`/api/classrooms/${params.id}/assignments`, {
+      const response = await fetch(`/api/classrooms/${id}/assignments`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -101,7 +102,7 @@ export default function CreateAssignment({ params }: { params: { id: string } })
 
       const data = await response.json();
       toast.success("Assignment created successfully");
-      router.push(`/classroom/${params.id}`);
+      router.push(`/classroom/${id}`);
       router.refresh();
     } catch (error) {
       console.error(error);

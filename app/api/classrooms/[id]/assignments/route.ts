@@ -10,9 +10,10 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session) {
+    if (!session || !session.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const user = session.user;
 
     const classroomId = params.id;
 
@@ -22,7 +23,7 @@ export async function GET(
         id: classroomId,
       },
       include: {
-        students: true,
+        enrollments: { include: { student: true } },
         teacher: true,
       },
     });
@@ -35,9 +36,9 @@ export async function GET(
     }
 
     // Check if user is teacher or student in this classroom
-    const isTeacher = classroom.teacherId === session.user.id;
-    const isStudent = classroom.students.some(
-      (student) => student.id === session.user.id
+    const isTeacher = classroom.teacherId === user.id;
+    const isStudent = classroom.enrollments.some(
+      (enrollment) => enrollment.studentId === user.id
     );
 
     if (!isTeacher && !isStudent) {
@@ -54,7 +55,7 @@ export async function GET(
       },
       include: {
         submissions: {
-          where: isStudent ? { studentId: session.user.id } : undefined,
+          where: isStudent ? { studentId: user.id } : undefined,
         },
       },
       orderBy: {
@@ -79,9 +80,10 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session) {
+    if (!session || !session.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const user = session.user;
 
     const classroomId = params.id;
     const data = await request.json();
@@ -90,7 +92,7 @@ export async function POST(
     const classroom = await prisma.classroom.findUnique({
       where: {
         id: classroomId,
-        teacherId: session.user.id,
+        teacherId: user.id,
       },
     });
 
@@ -101,13 +103,14 @@ export async function POST(
       );
     }
 
-    // Create new assignment
+    // Create new assignment (type is required)
     const assignment = await prisma.assignment.create({
       data: {
         title: data.title,
         description: data.description,
         dueDate: new Date(data.dueDate),
         totalPoints: data.totalPoints,
+        type: data.type, // <-- type is required!
         classroom: {
           connect: {
             id: classroomId,

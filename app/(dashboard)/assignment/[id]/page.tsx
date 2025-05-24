@@ -37,9 +37,10 @@ export default function AssignmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
-
+  const assignmentId = Array.isArray(params.id) ? params.id[0] : params.id;
+  
   useEffect(() => {
-    if (status === "loading") return;
+    if (status === "loading" || !assignmentId) return;
 
     if (status === "unauthenticated") {
       router.push("/login");
@@ -49,7 +50,7 @@ export default function AssignmentPage() {
     const fetchAssignment = async () => {
       try {
 
-        const response = await fetch(`/api/assignments/${params.id}`);
+        const response = await fetch(`/api/assignments/${assignmentId}`);
         if (!response.ok) throw new Error("Failed to fetch assignment");
 
         const data: Assignment = await response.json();
