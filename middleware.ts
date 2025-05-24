@@ -8,7 +8,8 @@ export default withAuth(
     const isAuth = !!token;
     const isAuthPage =
       req.nextUrl.pathname.startsWith("/login") ||
-      req.nextUrl.pathname.startsWith("/register");
+      req.nextUrl.pathname.startsWith("/register") ||
+      req.nextUrl.pathname.startsWith("/admin/login");
 
     if (isAuthPage) {
       if (isAuth) {
@@ -17,13 +18,18 @@ export default withAuth(
       return null;
     }
 
-    if (!isAuth && req.nextUrl.pathname.startsWith("/dashboard")) {
+    if (!isAuth && (req.nextUrl.pathname.startsWith("/dashboard") || req.nextUrl.pathname.startsWith("/admin"))) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
     if (isAuth) {
       const role = token.role as string;
       
+      // Protect admin routes
+      if (role !== "ADMIN" && req.nextUrl.pathname.startsWith("/admin")) {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+      }
+
       // Direct teacher to teacher dashboard
       if (role === "TEACHER" && req.nextUrl.pathname === "/dashboard") {
         return NextResponse.redirect(new URL("/dashboard/teacher", req.url));
@@ -60,6 +66,7 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/classroom/:path*",
+    "/admin/:path*",
     "/login",
     "/register",
   ],
