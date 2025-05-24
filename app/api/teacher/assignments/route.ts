@@ -61,9 +61,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(formattedAssignments);
+    // Ensure the payload is always an array (never null)
+    return NextResponse.json(Array.isArray(formattedAssignments) ? formattedAssignments : []);
   } catch (error) {
-    console.error("Error fetching teacher assignments:", error);
+    console.log(error)
+    // console.log("Error fetching teacher assignments:", error);
     return NextResponse.json(
       { error: "Failed to fetch assignments" },
       { status: 500 }
