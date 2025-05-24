@@ -30,6 +30,9 @@ export default function Home() {
               <Link href="/register" passHref>
                 <Button>Sign up</Button>
               </Link>
+              <Link href="/admin/login" passHref>
+                <Button variant="secondary">Admin Login</Button>
+              </Link>
             </nav>
           </div>
         </div>
