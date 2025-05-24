@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Users, GraduationCap, Download } from "lucide-react";
 
@@ -68,18 +68,25 @@ export default function AdminDashboard() {
       toast.error(`Failed to download ${type} report`);
     }
   };
-
+ const onLogout = () => {
+    signOut({ callbackUrl: "/" });
+  };
   if (loading || !data) {
     return <div>Loading...</div>;
   }
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-        <p className="text-muted-foreground">
-          Manage and monitor system users
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <p className="text-muted-foreground">
+            Manage and monitor system users
+          </p>
+        </div>
+        <Button variant="outline" onClick={onLogout}>
+          Logout
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
